@@ -30,11 +30,15 @@ def write_file(json_list):
     owners = list(OrderedDict.fromkeys(owners))
 
     #Remove duplicates from owner + balance
+    #If owner already exists, sum the balances
     owners_balance = {}
     for acc in json_list:
         owner = extract_owner(acc)
         balance = extract_balance(acc)
-        owners_balance[owner] = float(balance)
+        if owner not in owners_balance:
+            owners_balance[owner] = float(balance)
+        else:
+            owners_balance[owner] += float(balance)
 
     with open(original_filename, 'w') as f:
         json.dump(json_list, f, ensure_ascii=False, indent=4)

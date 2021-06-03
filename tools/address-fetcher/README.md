@@ -34,4 +34,6 @@ python3 address-fetcher.py
 ![address-fetcher-gif](https://github.com/praskoson/distribution-tools/blob/main/assets/gifs/address-fetcher.gif)
 
 ## Issues
-When using `token` address types, a single account owner can have multiple token accounts. Currently, we don't differentiate multiple token accounts belonging to the same owner. When using `owner` addresses, this is not an issue, as the app will only try to use the associated token account.
+When using `token` address types, a single account owner can have multiple token accounts. Currently, we don't differentiate multiple token accounts belonging to the same owner. 
+
+When using `owner` address types, the app will read multiple balances belonging to the same account (should the account own multiple token accounts) and sum them to arrive at the final balance. Accounts can sometimes own multiple token accounts when changing the token account authority or in some other strange situations.
