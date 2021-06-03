@@ -40,3 +40,5 @@ Distributed under the MIT License
 * [Samoyed Discord](https://discord.gg/Gc5uecWZR2)
 * [Solana](https://solana.com/)
 * [Solana Discord](https://discord.com/invite/pquxPsq)
+
+Contact me on Discord: praskOo#0892
