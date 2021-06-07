@@ -309,6 +309,8 @@ def main():
         input_path = args.address_list
         interactive = args.interactive
         drop_amount = args.drop_amount
+        fund_recipient = args.fund_recipient
+        allow_unfunded_recipient = args.allow_unfunded_recipient
         transfer(input_path, interactive,
                     drop_amount, TOKEN_MINT, TOKEN_DECIMALS,
                     RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS,
@@ -589,6 +591,18 @@ parser_t.add_argument(
     required=True,
     help='Path to the file that contains all addresses that will receive the \
         airdrop. Each address should be in a seperate line. The file must be UTF-8 encoded.'
+)
+parser_t.add_argument(
+    '--fund-recipient',
+    action='store_true',
+    required=False,
+    help='Create the associated token account for the recipient if it does not exist.'
+)
+parser_t.add_argument(
+    '--allow-unfunded-recipient',
+    action='store_true',
+    required=False,
+    help='Complete the transfer even if the recipient\'s address is not funded.'
 )
 
 if __name__ == '__main__':
