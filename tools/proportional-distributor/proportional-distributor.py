@@ -132,6 +132,8 @@ class TransferCmd:
         self.url = url
         if options is None:
             self.options = []
+        else:
+            self.options = options
 
     def to_str(self):
         return f"{self.cmd} {self.instruction} {self.mint_address} {self.drop_amount:.{self.decimals}f} {self.recipient} {' '.join(self.options)}"
@@ -312,11 +314,12 @@ def main():
         drop_amount = args.drop_amount
         fund_recipient = args.fund_recipient
         allow_unfunded_recipient = args.allow_unfunded_recipient
-        transfer(input_path, interactive,
-                 drop_amount, TOKEN_MINT, TOKEN_DECIMALS,
-                 RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS,
-                 SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS,
-                 UNCONFIRMED_LOGS)
+        transfer(input_path, interactive, drop_amount, 
+            fund_recipient, allow_unfunded_recipient, 
+            TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, 
+            LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, 
+            FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
+        )
     else:
         sys.exit('No mode selected, use -h')
 
@@ -385,9 +388,10 @@ def after(input_file, addr_type, mint, decimals, url):
                 fw.write(state + '\n')
 
 
-def transfer(input_path, interactive, drop_amount, mint,
-             decimals, rpc_url, log_prefix, full_log, success_log, failed_log,
-             canceled_log, unconfirmed_log):
+def transfer(input_path, interactive, drop_amount, 
+            fund_recipient, allow_unfunded_recipient, mint, 
+            decimals, rpc_url, log_prefix, full_log, success_log, 
+            failed_log, canceled_log, unconfirmed_log):
     SEPARATOR = "-" * 50
     LOG_SEPARATOR = "-" * 30 + "\n"
     TOO_MANY_REQUESTS = "429 Too Many Requests"
@@ -453,12 +457,17 @@ def transfer(input_path, interactive, drop_amount, mint,
             # Calculate proportional drop 
             current_balance = accounts[addr]
             drop = current_balance * proportional_factor
-            if not interactive:
+            options = []
+            if fund_recipient:
+                options.append('--fund-recipient')
+            if allow_unfunded_recipient:
+                options.append('--allow-unfunded-recipient')
+            cmd = TransferCmd("spl-token", "transfer",
+                mint, decimals, drop, addr, rpc_url, options)
 
+            if not interactive:
                 log_detail_entry = ""
                 print(f"{i+1}. Airdrop to {addr}: ", end="", flush=True)
-                cmd = TransferCmd("spl-token", "transfer",
-                                  mint, decimals, drop, addr, rpc_url)
                 log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
                 log_detail_entry += try_transfer(
                     cmd, addr, drop,
@@ -470,12 +479,9 @@ def transfer(input_path, interactive, drop_amount, mint,
                     lf.write(log_detail_entry + LOG_SEPARATOR)
                 del cmd
                 i += 1
-
             elif interactive:
                 log_detail_entry = ""
                 print(f"{i+1}. ", end="", flush=True)
-                cmd = TransferCmd("spl-token", "transfer",
-                                  mint, decimals,  drop, addr, rpc_url)
                 log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
 
                 confirm, switch_mode = single_transaction_prompt(
