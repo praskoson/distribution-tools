@@ -390,7 +390,7 @@ def transfer(input_path, interactive, drop_amount, mint,
     with open(log_failed, "a") as lfa:
         lfa.write('recipient,amount,error\n')
     with open(log_unconfirmed, "a") as lu:
-        lu.write('recipient,amount,error')
+        lu.write('recipient,amount,error\n')
     # endregion
 
     print()
