@@ -154,6 +154,55 @@ def run(cmd):
     return proc.returncode, stdout, stderr
 
 
+def try_transfer(cmd, addr, drop, log_success, log_unconfirmed, log_failed,
+                 TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED):
+    log_detail_entry = ''
+    while True:
+        code, out, err = run(cmd.to_list())
+        if code == 0:
+            output = out.decode('utf-8')
+            print(
+                f'{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}', flush=True)
+            sig = parse_sig(output)
+            with open(log_success, 'a') as ls:
+                ls.write(f'{addr},{drop:f},{sig}\n')
+            log_detail_entry += output + '\n'
+            break
+        else:
+            err_msg = err.decode('utf-8')
+            if TOO_MANY_REQUESTS in err_msg:
+                print('429, waiting 5... ', end='', flush=True)
+                time.sleep(5)
+                log_detail_entry += err_msg + '\n'
+                continue
+            if RPC_ERROR in err_msg:
+                print('-32005 RPC Error, waiting 5... ',
+                        end='', flush=True)
+                log_detail_entry += err_msg + '\n'
+                time.sleep(5)
+                continue
+            if UNCONFIRMED in err_msg:
+                print(
+                    f'{bcolors.DANGER}UNCONFIRMED{bcolors.ENDC}', flush=True)
+                with open(log_unconfirmed, "a") as lu:
+                    lu.write(f'{addr},{drop:f},{err_msg}')
+                log_detail_entry += err_msg + '\n'
+                break
+
+            print(f'{bcolors.FAIL}FAILED{bcolors.ENDC}', flush=True)
+            try:
+                err_short = err_msg.split('\n', 1)[0] + '\n'
+                err_short = re.sub(r"[,]", ' ', err_short)
+            except (IndexError, Exception):
+                err_short = 'Error parsing error description - read the full logs.\n'
+            finally:
+                with open(log_failed, 'a') as lfa:
+                    lfa.write(f'{addr},{drop:f},{err_short}')
+            log_detail_entry += err_msg + '\n'
+            break
+    return log_detail_entry
+
+
 def get_assoc_addr(addr, mint, url):
     cmd = ['spl-token', 'address', '--token', mint, '--owner', addr,
            '--url', url, '--verbose']
@@ -409,50 +458,12 @@ def transfer(input_path, interactive, drop_amount, mint,
                 cmd = TransferCmd("spl-token", "transfer",
                                   mint, decimals, drop, addr, rpc_url)
                 log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
+                log_detail_entry += try_transfer(
+                    cmd, addr, drop,
+                    log_success, log_unconfirmed, log_failed,
+                    TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED
+                )
 
-                while True:
-                    code, out, err = run(cmd.to_list())
-                    if code == 0:
-                        print(
-                            f"{bcolors.OKGREEN}SUCCESS{bcolors.ENDC}", flush=True)
-                        sig = parse_sig(out.decode('utf-8'))
-                        with open(log_success, "a") as ls:
-                            ls.write(f"{addr},{drop:f},{sig}\n")
-                        break
-                    else:
-                        err_msg = err.decode('utf-8')
-                        if TOO_MANY_REQUESTS in err_msg:
-                            print("429, waiting 5... ", end="", flush=True)
-                            time.sleep(5)
-                            log_detail_entry += err_msg + '\n'
-                            continue
-                        if RPC_ERROR in err_msg:
-                            print("-32005 RPC Error, waiting 10... ",
-                                  end="", flush=True)
-                            log_detail_entry += err_msg + '\n'
-                            time.sleep(5)
-                            continue
-                        if UNCONFIRMED in err_msg:
-                            print(
-                                f"{bcolors.DANGER}UNCONFIRMED{bcolors.ENDC}", flush=True)
-                            with open(log_unconfirmed, "a") as lu:
-                                lu.write(f"{addr},{drop:f},{err_msg}")
-                            break
-
-                        print(f"{bcolors.FAIL}FAILED{bcolors.ENDC}", flush=True)
-                        try:
-                            err_short = (err.decode('utf-8')
-                                         ).split("\n", 1)[0] + '\n'
-                            err_short = re.sub(r"[,]", ' ', err_short)
-                        except (IndexError, Exception) as e:
-                            err_short = "Error parsing error description - read the full logs.\n"
-                        finally:
-                            with open(log_failed, "a") as lfa:
-                                lfa.write(f"{addr},{drop:f},{err_short}")
-                        break
-
-                log_detail_entry += out.decode('utf-8')
-                log_detail_entry += err.decode('utf-8')
                 with open(log_full, "a") as lf:
                     lf.write(log_detail_entry + LOG_SEPARATOR)
                 del cmd
@@ -473,55 +484,17 @@ def transfer(input_path, interactive, drop_amount, mint,
                     confirm = True
 
                 if confirm:
-                    while True:
-                        code, out, err = run(cmd.to_list())
-                        if code == 0:
-                            print(
-                                f"  {bcolors.OKGREEN}SUCCESS{bcolors.ENDC}", flush=True)
-                            sig = parse_sig(out.decode('utf-8'))
-                            with open(log_success, "a") as ls:
-                                ls.write(f"{addr},{drop:f},{sig}\n")
-                        else:
-                            err_msg = err.decode('utf-8')
-                            if TOO_MANY_REQUESTS in err_msg:
-                                print("429 Too many requests, waiting 5... ",
-                                      end="", flush=True)
-                                log_detail_entry += err_msg + '\n'
-                                time.sleep(5)
-                                continue
-                            if RPC_ERROR in err_msg:
-                                print("-32005 RPC Error, waiting 5... ",
-                                      end="", flush=True)
-                                log_detail_entry += err_msg + '\n'
-                                time.sleep(5)
-                                continue
-                            if UNCONFIRMED in err.decode('utf-8'):
-                                print(
-                                    f"  {bcolors.WARNING}UNCONFIRMED{bcolors.ENDC}", flush=True)
-                                with open(log_unconfirmed, "a") as lu:
-                                    lu.write(f"{addr},{drop:f},{err_msg}")
-                                break
+                    log_detail_entry += try_transfer(
+                        cmd, addr, drop,
+                        log_success, log_unconfirmed, log_failed,
+                        TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED
+                    )
 
-                            print(
-                                f"  {bcolors.FAIL}FAILED{bcolors.ENDC}", flush=True)
-                            try:
-                                err_short = (err.decode('utf-8')
-                                             ).split("\n", 1)[0] + '\n'
-                                err_short = re.sub(r"[,]", ' ', err_short)
-                            except (IndexError, Exception):
-                                err_short = "Error reading error description - read the full logs.\n"
-                            finally:
-                                with open(log_failed, "a") as lfa:
-                                    lfa.write(f"{addr},{drop:f},{err_short}")
-
-                        log_detail_entry += out.decode('utf-8')
-                        log_detail_entry += err.decode('utf-8')
-                        with open(log_full, "a") as lf:
-                            lf.write(log_detail_entry + LOG_SEPARATOR)
-                        break
+                    with open(log_full, "a") as lf:
+                        lf.write(log_detail_entry + LOG_SEPARATOR)
                 elif not confirm:
                     print(
-                        f"    {bcolors.DANGER}CANCELED{bcolors.ENDC}", flush=True)
+                        f"{bcolors.DANGER}CANCELED{bcolors.ENDC}", flush=True)
                     cancel = f"{addr},{drop:f}"
                     with open(log_canceled, "a") as lc:
                         lc.write(cancel + "\n")
