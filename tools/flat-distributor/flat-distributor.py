@@ -131,6 +131,8 @@ class TransferCmd:
         self.url = url
         if options is None:
             self.options = []
+        else:
+            self.options = options
 
     def to_str(self):
         return f"{self.cmd} {self.instruction} {self.mint_address} {self.drop_amount:.{self.decimals}f} {self.recipient} {' '.join(self.options)}"
