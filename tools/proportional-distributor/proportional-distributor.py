@@ -256,6 +256,8 @@ class bcolors:
 def main():
     args = parser.parse_args()
     mode = args.mode
+    if not mode:
+        sys.exit('Select a subcommand (-h)')
 
     ok, env = get_env()
     if ok:
@@ -320,8 +322,6 @@ def main():
             LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, 
             FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
         )
-    else:
-        sys.exit('No mode selected, use -h')
 
 
 def before(input_file, drop, addr_type, mint, decimals, rpc_url):
