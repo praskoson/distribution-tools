@@ -415,11 +415,13 @@ def transfer(input_path, interactive, drop_amount,
         f"Running airdrop for the Token Mint: {bcolors.OKGREEN}{mint}{bcolors.ENDC}")
     drop = amount_prompt(drop_amount)
     print(
-        f"Airdrop amount: {bcolors.OKGREEN}{drop:,.{decimals}f}{bcolors.ENDC}\n")
+        f"Airdrop amount: {bcolors.OKGREEN}{drop:,.{decimals}f}{bcolors.ENDC}")
 
     try:
         with open(input_path) as f:
             address_list = f.read().splitlines()
+        print(f'Airdropping to {bcolors.OKGREEN}{len(address_list)} users{bcolors.ENDC}')
+        print(f'Estimated total tokens to be distributed: {bcolors.OKGREEN}{(len(address_list) * drop):,f}{bcolors.ENDC}\n')
     except (OSError, IOError) as e:
         sys.exit(f"Error opening address list files.\n{e.strerror}")
 
