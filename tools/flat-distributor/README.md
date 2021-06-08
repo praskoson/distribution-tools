@@ -56,7 +56,7 @@ Also, consider the possible security issues when using file-system wallets ([Sol
 This command will generate multiple log files, the location and names of which can be set in the 'config.env' file.
 Use the option`--non-interactive` to run the distribution in non-interactive mode, where each transaction doesn't have to be confirmed.
 
-The transaction will succeed only if the recipient is funded and his (asssociated) token account exists.
+If sending tokens to owner accounts that do not have a minted associated token address, use `--fund-recipient` option. For accounts that are unfunded (i.e. have 0 SOL), use `--allow-unfunded-recipient`. Both options behave just as they do in the `spl-token transfer` command. 
 
 Execution can be interrupted at any time with SIGINT (CTRL+C).
 
