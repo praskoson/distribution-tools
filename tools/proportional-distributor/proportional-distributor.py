@@ -355,37 +355,43 @@ def after(input_file, addr_type, mint, decimals, url):
     with open(input_file, 'r') as f:
         lines = f.readlines()
 
-    with open(output_file, 'w') as fw:
-        for line in lines:
-            try:
-                addr, _, expected = line.split(',')
+    with open(output_file, 'w') as f:
+            # Read before.csv
+            for line in lines:
+                output_line = ''
+                try:
+                    addr, _, expected = [x.strip() for x in line.split(',')]
+                    output_line += f'{addr},'
+                except IndexError as e:
+                    sys.exit('Error reading input file: ' + str(e))
+
                 try:
                     expected = float(expected)
+                    output_line += f'{expected:.{decimals}f},'
                 except ValueError:
-                    state = f'{addr},{expected},{expected},NaN'
-                    print(state)
-                    fw.write(state + '\n')
-                    continue
-            except (IndexError) as e:
-                sys.exit('Error when reading input file: ' + str(e))
+                    # Not a number, expecting a No token account message
+                    output_line += f'{expected},'
 
-            ok, actual = get_balance(addr, addr_type, mint, url)
-            if ok:
-                diff = actual - expected
-                if diff >= 0:
-                    # green
-                    color = '\033[92m'
-                elif diff < 0:
-                    # red
-                    color = '\033[91m'
-                state = f'{addr},{expected:.{decimals}f},{actual:.{decimals}f},{diff:f}'
-                endc = '\033[0m'
-                print(color + state + endc)
-                fw.write(state + '\n')
-            else:
-                state = f'{addr},{expected},{actual},NaN'
-                print(state)
-                fw.write(state + '\n')
+                ok, actual = get_balance(addr, addr_type, mint, url)
+                if ok:
+                    endc = '\033[0m'
+                    startc = ''
+                    try:
+                        diff = actual - expected
+                        if diff >= 0:
+                            startc = '\033[92m'
+                        else:
+                            startc = '\033[91m'
+                        output_line += f'{actual:.{decimals}f},{diff:.{decimals}f}'
+                    except TypeError:
+                        # Assuming actual was not a number
+                        diff = 'NaN'
+                        output_line += f'{actual},{diff}'          
+                else:
+                    output_line += f'{actual},NaN'
+
+                print(startc + output_line + endc)
+                f.write(output_line + '\n')
 
 
 def transfer(input_path, interactive, drop_amount, 
