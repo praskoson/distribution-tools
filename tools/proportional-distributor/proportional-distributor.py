@@ -416,7 +416,7 @@ def transfer(input_path, interactive, drop_amount,
         f"Running airdrop for the Token Mint: {bcolors.OKGREEN}{mint}{bcolors.ENDC}")
     total_drop = amount_prompt(drop_amount)
     print(
-        f"Airdrop amount: {bcolors.OKGREEN}{total_drop:,.{decimals}f}{bcolors.ENDC}\n")
+        f"Total airdrop amount: {bcolors.OKGREEN}{total_drop:,.{decimals}f}{bcolors.ENDC}")
 
     accounts = OrderedDict()
     try:
@@ -424,6 +424,7 @@ def transfer(input_path, interactive, drop_amount,
             for line in f:
                 address, balance = line.split(',')
                 accounts[address.strip()] = float(balance.strip())
+        print(f'Airdropping to {bcolors.OKGREEN}{len(accounts)}{bcolors.ENDC} users\n')
 
     except (OSError, IOError, IndexError, ValueError) as e:
         sys.exit(f"Error opening or reading address/exclusion files: {str(e)}")
