@@ -224,6 +224,7 @@ parser.add_argument(
     help='Mint address of the SPL token'
 )
 parser.add_argument(
+    '-t',
     '--address-type',
     dest="atype",
     choices={'owner', 'token'},
