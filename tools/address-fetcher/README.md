@@ -8,14 +8,14 @@ The app will create an output folder in the same directory that it is ran from, 
 ## Outputs
 The folder will contain a raw JSON file that was used to get the token account info from the Solana RPC API, a list of addresses seperated by new lines and a list of addresses and their corresponding balances for the given token, seperated by a comma. 
 
-The type of addresses that will be written to output files is selected with the option `--address-type`. Possible choices are `token` and `owner`.
+The type of addresses that will be written to output files is selected with the option `-t` or `--address-type`. Possible choices are `token` and `owner`.
 
 ## Usage
 
 The available arguments are:
 ```
   -m MINT, --mint MINT  Mint address of the SPL token
-  --address-type {owner,token}  Select the address type used in the file (owner | token).
+  -t {owner, token}, --address-type {owner,token}  Select the address type used in the output file (owner | token).
   -u URL, --url URL  URL of the Solana RPC endpoint.
   -e EXCLUDED, --excluded EXCLUDED  Path to the file that contains all addresses that will be removed from the final list. Each address should be in a seperate line, and the file must be UTF-8 encoded.
   ```
