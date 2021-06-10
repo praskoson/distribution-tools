@@ -543,6 +543,7 @@ parser_b.add_argument(
     help='Path to the file containing a list of addresses, seperated into new lines.'
 )
 parser_b.add_argument(
+    '-t',
     '--address-type',
     metavar='ADDRESS_TYPE',
     dest='address_type',
@@ -563,6 +564,7 @@ parser_b.add_argument(
 parser_a = subparsers.add_parser(
     'check-after', help='Run the checker after a distribution, to check if all recipients received the expected amount of tokens.')
 parser_a.add_argument(
+    '-t',
     '--address-type',
     metavar='ADDRESS_TYPE',
     dest='address_type',

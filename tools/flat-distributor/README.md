@@ -39,7 +39,7 @@ UNCONFIRMED_LOGS=unconfirmed.log
 ## flat-distributor check-before
 `check-before` can be used before a distribution, and will generate a CSV file containing the current balances for all recipients, and their expected balances after the distribution. The generated file will be named **before.csv** and is used as input for the `check-after` command.
 
-It is required to specify the address type used in the address list file (`--address-type {owner|token}`) and the amount of tokens that will be distributed. 
+It is required to specify the address type used in the address list file (`-t` or `--address-type {owner|token}`) and the amount of tokens that will be distributed. 
 
 ### Usage:
 `python3 flat-distributor.py check-before -a address-list.txt --address-type owner --drop 500`
@@ -70,7 +70,7 @@ Execution can be interrupted at any time with SIGINT (CTRL+C).
 
 This mode also generates a CSV file that can then be read to compare the expected vs actual balances of all recipients. 
 
-Address type must be specified with the `address-type` argument, where the type can be `owner` or `token`. 
+Address type must be specified with the `-t` or `address-type` argument, where the type can be `owner` or `token`. 
 
 ### Usage
 `python3 flat-distributor.py check-after --address-type owner --before-file before.csv`
