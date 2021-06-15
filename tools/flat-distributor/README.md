@@ -58,6 +58,8 @@ Use the option`--non-interactive` to run the distribution in non-interactive mod
 
 If sending tokens to owner accounts that do not have a minted associated token address, use `--fund-recipient` option. For accounts that are unfunded (i.e. have 0 SOL), use `--allow-unfunded-recipient`. Both options behave just as they do in the `spl-token transfer` command. 
 
+The `--retry-on-429` option will retry any transaction if it returns with a HTTP Too Many Requests error (429). This error is NOT a guarantee that the transaction didn't happen, so it can cause double transactions in rare cases, due to a bug in how `spl-token` handles this error. The default behaviour will treat this error as an unconfirmed transaction, so use it at your own risk.
+
 Execution can be interrupted at any time with SIGINT (CTRL+C).
 
 ### Usage:
