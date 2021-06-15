@@ -151,7 +151,7 @@ def try_transfer(cmd, addr, drop, log_success, log_unconfirmed, log_failed,
                 log_detail_entry += err_msg + '\n'
                 time.sleep(5)
                 continue
-            if TOO_MANY_REQUESTS in err_msg:
+            if RETRY_ON_429 and (TOO_MANY_REQUESTS in err_msg):
                 print('429, waiting 5... ', end='', flush=True)
                 time.sleep(5)
                 log_detail_entry += err_msg + '\n'
@@ -253,7 +253,7 @@ class bcolors:
 
 
 def main():
-    global TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
+    global TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS, RETRY_ON_429
     args = parser.parse_args()
     mode = args.mode
     if not mode:
@@ -304,6 +304,7 @@ def main():
         drop_amount = args.drop_amount
         fund_recipient = args.fund_recipient
         allow_unfunded_recipient = args.allow_unfunded_recipient
+        RETRY_ON_429 = args.retry_on_429
         transfer(input_path, interactive,drop_amount, 
             fund_recipient, allow_unfunded_recipient
         )
@@ -606,6 +607,14 @@ parser_t.add_argument(
     required=False,
     help='Complete the transfer even if the recipient\'s address is not funded.'
 )
+parser_t.add_argument(
+    '--retry-on-429',
+    dest='retry_on_429',
+    action='store_true',
+    default=False,
+    required=False,
+    help='Retry when a HTTP 429 error code is encountered. Use this at your own risk.'
+)
 #endregion
 
 if __name__ == '__main__':
@@ -618,4 +627,5 @@ if __name__ == '__main__':
     FAILED_LOGS = 'failed.log'
     CANCELED_LOGS = 'canceled.log'
     UNCONFIRMED_LOGS = 'unconfirmed.log'
+    RETRY_ON_429 = False
     main()
