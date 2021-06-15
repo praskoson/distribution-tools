@@ -158,6 +158,7 @@ def run(cmd):
 
 def try_transfer(cmd, addr, drop, log_success, log_unconfirmed, log_failed,
                  TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED):
+    global RETRY_ON_429
     log_detail_entry = ''
     while True:
         code, out, err = run(cmd.to_list())
@@ -172,18 +173,18 @@ def try_transfer(cmd, addr, drop, log_success, log_unconfirmed, log_failed,
             break
         else:
             err_msg = err.decode('utf-8')
-            if TOO_MANY_REQUESTS in err_msg:
-                print('429, waiting 5... ', end='', flush=True)
-                time.sleep(5)
-                log_detail_entry += err_msg + '\n'
-                continue
             if RPC_ERROR in err_msg:
                 print('-32005 RPC Error, waiting 5... ',
                         end='', flush=True)
                 log_detail_entry += err_msg + '\n'
                 time.sleep(5)
                 continue
-            if UNCONFIRMED in err_msg:
+            if RETRY_ON_429 and (TOO_MANY_REQUESTS in err_msg):
+                print('429, waiting 5... ', end='', flush=True)
+                time.sleep(5)
+                log_detail_entry += err_msg + '\n'
+                continue
+            if UNCONFIRMED in err_msg or TOO_MANY_REQUESTS in err_msg:
                 print(
                     f'{bcolors.DANGER}UNCONFIRMED{bcolors.ENDC}', flush=True)
                 with open(log_unconfirmed, "a") as lu:
@@ -256,6 +257,7 @@ class bcolors:
 def main():
     args = parser.parse_args()
     mode = args.mode
+    global TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS, RETRY_ON_429
     if not mode:
         sys.exit('Select a subcommand (-h)')
 
@@ -274,17 +276,6 @@ def main():
         except KeyError as e:
             sys.exit('Error reading config file: ' + str(e))
     else:
-        # Using default values for logs
-        TOKEN_MINT = ""
-        TOKEN_DECIMALS = ""
-        RPC_URL = ""
-        LOG_FOLDER_PREFIX = 'logs-'
-        FULL_LOGS = 'detailed.log'
-        SUCCESS_LOGS = 'success.log'
-        FAILED_LOGS = 'failed.log'
-        CANCELED_LOGS = 'canceled.log'
-        UNCONFIRMED_LOGS = 'unconfirmed.log'
-
         if RPC_URL == "":
             rpc_endpoints = {
                 'mainnet': 'https://api.mainnet-beta.solana.com',
@@ -304,27 +295,25 @@ def main():
         input_file = args.file_name
         address_type = args.address_type
         drop = args.drop
-        before(input_file, drop, address_type,
-               TOKEN_MINT, TOKEN_DECIMALS, RPC_URL)
+        before(input_file, drop, address_type)
     elif mode == 'check-after':
         before_file = args.before_file_name
         addr_type = args.address_type
-        after(before_file, addr_type, TOKEN_MINT, TOKEN_DECIMALS, RPC_URL)
+        after(before_file, addr_type)
     elif mode == 'transfer':
         input_path = args.address_list
         interactive = args.interactive
         drop_amount = args.drop_amount
         fund_recipient = args.fund_recipient
         allow_unfunded_recipient = args.allow_unfunded_recipient
+        RETRY_ON_429 = args.retry_on_429
         transfer(input_path, interactive, drop_amount, 
-            fund_recipient, allow_unfunded_recipient, 
-            TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, 
-            LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, 
-            FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
+            fund_recipient, allow_unfunded_recipient
         )
 
 
-def before(input_file, drop, addr_type, mint, decimals, rpc_url):
+def before(input_file, drop, addr_type):
+    global TOKEN_DECIMALS
     output_file = './before.csv'
     print('recipient,current-balance,expected-balance')
 
@@ -345,10 +334,11 @@ def before(input_file, drop, addr_type, mint, decimals, rpc_url):
             balance = accounts[addr]
             expected = balance + balance * factor
             print(f'{addr} - {balance:.3f} - {expected:.3f}')
-            fw.write(f'{addr},{balance:.{decimals}f},{expected:.{decimals}f}\n')
+            fw.write(f'{addr},{balance:.{TOKEN_DECIMALS}f},{expected:.{TOKEN_DECIMALS}f}\n')
 
 
-def after(input_file, addr_type, mint, decimals, url):
+def after(input_file, addr_type):
+    global TOKEN_MINT, TOKEN_DECIMALS, RPC_URL
     lines = []
     output_file = './after.csv'
     print('recipient,expected-balance,actual-balance,difference')
@@ -367,12 +357,12 @@ def after(input_file, addr_type, mint, decimals, url):
 
                 try:
                     expected = float(expected)
-                    output_line += f'{expected:.{decimals}f},'
+                    output_line += f'{expected:.{TOKEN_DECIMALS}f},'
                 except ValueError:
                     # Not a number, expecting a No token account message
                     output_line += f'{expected},'
 
-                ok, actual = get_balance(addr, addr_type, mint, url)
+                ok, actual = get_balance(addr, addr_type, TOKEN_MINT, RPC_URL)
                 if ok:
                     endc = '\033[0m'
                     startc = ''
@@ -382,7 +372,7 @@ def after(input_file, addr_type, mint, decimals, url):
                             startc = '\033[92m'
                         else:
                             startc = '\033[91m'
-                        output_line += f'{actual:.{decimals}f},{diff:.{decimals}f}'
+                        output_line += f'{actual:.{TOKEN_DECIMALS}f},{diff:.{TOKEN_DECIMALS}f}'
                     except TypeError:
                         # Assuming actual was not a number
                         diff = 'NaN'
@@ -395,9 +385,8 @@ def after(input_file, addr_type, mint, decimals, url):
 
 
 def transfer(input_path, interactive, drop_amount, 
-            fund_recipient, allow_unfunded_recipient, mint, 
-            decimals, rpc_url, log_prefix, full_log, success_log, 
-            failed_log, canceled_log, unconfirmed_log):
+            fund_recipient, allow_unfunded_recipient):
+    global TOKEN_MINT, TOKEN_DECIMALS, RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
     SEPARATOR = "-" * 50
     LOG_SEPARATOR = "-" * 30 + "\n"
     TOO_MANY_REQUESTS = "429 Too Many Requests"
@@ -413,10 +402,10 @@ def transfer(input_path, interactive, drop_amount,
     print(f"{bcolors.DANGER}WARNING: MAKE SURE YOU ARE USING THE CORRECT WALLET TO DISTRIBUTE.\
         \nYour current wallet address is: {current_supply.decode('utf-8')}{bcolors.ENDC}")
     print(
-        f"Running airdrop for the Token Mint: {bcolors.OKGREEN}{mint}{bcolors.ENDC}")
+        f"Running airdrop for the Token Mint: {bcolors.OKGREEN}{TOKEN_MINT}{bcolors.ENDC}")
     total_drop = amount_prompt(drop_amount)
     print(
-        f"Total airdrop amount: {bcolors.OKGREEN}{total_drop:,.{decimals}f}{bcolors.ENDC}")
+        f"Total airdrop amount: {bcolors.OKGREEN}{total_drop:,.{TOKEN_DECIMALS}f}{bcolors.ENDC}")
 
     accounts = OrderedDict()
     try:
@@ -431,16 +420,16 @@ def transfer(input_path, interactive, drop_amount,
 
     # region Create log files, print locations, write headers
     timestamp = get_current_utc_time_str()
-    log_success = gen_logfile(success_log, timestamp, log_prefix)
-    log_canceled = gen_logfile(canceled_log, timestamp, log_prefix)
-    log_failed = gen_logfile(failed_log, timestamp, log_prefix)
-    log_unconfirmed = gen_logfile(unconfirmed_log, timestamp, log_prefix)
-    log_full = gen_logfile(full_log, timestamp, log_prefix)
+    log_success = gen_logfile(SUCCESS_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_canceled = gen_logfile(CANCELED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_failed = gen_logfile(FAILED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_unconfirmed = gen_logfile(UNCONFIRMED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_full = gen_logfile(FULL_LOGS, timestamp, LOG_FOLDER_PREFIX)
 
     print(f"  Successful logs: (tail -f {log_success})")
     print(f"  Canceled logs: (tail -f {log_canceled})")
     print(f"  Failed logs: (tail -f {log_failed})")
-    print(f"  Unconfirmed logs: (tail -f {log_unconfirmed}")
+    print(f"  Unconfirmed logs: (tail -f {log_unconfirmed})")
     print(f"  Detailed logs: (tail -f {log_full})")
 
     with open(log_success, "a") as ls:
@@ -470,7 +459,7 @@ def transfer(input_path, interactive, drop_amount,
             if allow_unfunded_recipient:
                 options.append('--allow-unfunded-recipient')
             cmd = TransferCmd("spl-token", "transfer",
-                mint, decimals, drop, addr, rpc_url, options)
+                TOKEN_MINT, TOKEN_DECIMALS, drop, addr, RPC_URL, options)
 
             if not interactive:
                 log_detail_entry = ""
@@ -492,7 +481,7 @@ def transfer(input_path, interactive, drop_amount,
                 log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
 
                 confirm, switch_mode = single_transaction_prompt(
-                    cmd.to_str(), drop, addr, decimals)
+                    cmd.to_str(), drop, addr, TOKEN_DECIMALS)
                 if switch_mode:
                     print("Switching to non-interactive mode on next address.")
                     interactive = False
@@ -633,6 +622,25 @@ parser_t.add_argument(
     required=False,
     help='Complete the transfer even if the recipient\'s address is not funded.'
 )
+parser_t.add_argument(
+    '--retry-on-429',
+    dest='retry_on_429',
+    action='store_true',
+    default=False,
+    required=False,
+    help='Retry when a HTTP 429 error code is encountered. Use this at your own risk.'
+)
+#endregion
 
 if __name__ == '__main__':
+    TOKEN_MINT = ""
+    TOKEN_DECIMALS = ""
+    RPC_URL = ""
+    LOG_FOLDER_PREFIX = 'logs-'
+    FULL_LOGS = 'detailed.log'
+    SUCCESS_LOGS = 'success.log'
+    FAILED_LOGS = 'failed.log'
+    CANCELED_LOGS = 'canceled.log'
+    UNCONFIRMED_LOGS = 'unconfirmed.log'
+    RETRY_ON_429 = False
     main()
