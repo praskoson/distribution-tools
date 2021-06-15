@@ -12,7 +12,7 @@ def get_current_utc_time_str():
     now_utc = datetime.now(timezone.utc)
     return now_utc.strftime("%Y-%m-%d-%H%M%S")
 
-def write_file(json_list):
+def write_files(data, raw_data):
     global OUTPUT_FILE, TOKEN, TOKEN_MINT
     # If token name is not resolved, use first 5 chars of address
     if TOKEN != TOKEN_MINT:
@@ -21,35 +21,21 @@ def write_file(json_list):
         token_name = TOKEN_MINT[:5]
 
     current_time = get_current_utc_time_str()
-    original_filename = "./" + token_name + "-" + current_time + "/" + 'fetched.json'
+    raw_filename = "./" + token_name + "-" + current_time + "/" + 'raw.json'
     filename = "./" + token_name + "-" + current_time + "/" + OUTPUT_FILE + ".txt"
     balance_filename = "./" + token_name + "-" + current_time + "/" + OUTPUT_FILE + "-balance.txt"
     os.makedirs(os.path.dirname(filename), exist_ok=True)
 
-    owners = list(map(extract_owner, json_list))
-    owners = list(OrderedDict.fromkeys(owners))
-
-    #Remove duplicates from owner + balance
-    #If owner already exists, sum the balances
-    owners_balance = {}
-    for acc in json_list:
-        owner = extract_owner(acc)
-        balance = extract_balance(acc)
-        if owner not in owners_balance:
-            owners_balance[owner] = float(balance)
-        else:
-            owners_balance[owner] += float(balance)
-
-    with open(original_filename, 'w') as f:
-        json.dump(json_list, f, ensure_ascii=False, indent=4)
+    with open(raw_filename, 'w') as f:
+        json.dump(raw_data, f, ensure_ascii=False, indent=4)
 
     with open(filename, 'w') as f:
-        for acc in owners:
-            f.write(acc.strip() + '\n')
+        for acc in data:
+            f.write(acc[0].strip() + '\n')
 
     with open(balance_filename, 'w') as f:
-        for acc in owners_balance:
-            f.write(acc.strip() + ',' + str(owners_balance[acc]) + '\n')
+        for acc in data:
+            f.write(f'{acc[0].strip()},{str(acc[1])}\n')
 
 
 def extract_balance(json):
@@ -95,13 +81,29 @@ def display_menu(options):
 #region Menus
 def top_menu():
     global ENDPOINT, TOKEN_MINT, TOKEN, EXCLUDED_PATH
-    full_list = get_accounts(ENDPOINT, TOKEN_MINT)['result']
+    raw_data = get_accounts(ENDPOINT, TOKEN_MINT)['result']
 
-    #Remove excluded
+    # Remove excluded
     if EXCLUDED_PATH != '':
         with open(EXCLUDED_PATH, 'r') as f:
             excluded = f.read().splitlines()
-        full_list[:] = [acc for acc in full_list if extract_owner(acc) not in excluded]
+        data = [acc for acc in raw_data if extract_owner(acc) not in excluded]
+    else:
+        data = raw_data
+
+    # Simplify the data with respect to the selected address-type
+    data_list = map(lambda acc: [extract_owner(acc), extract_balance(acc)], data)
+
+    # Eliminate duplicates
+    data_dictionary = {}
+    for address, balance in data_list:
+        if address not in data_dictionary:
+            data_dictionary[address] = float(balance)
+        else:
+            data_dictionary[address] += float(balance)
+
+    # We need to convert this back to a list so we can sort it :(
+    data_list = list(data_dictionary.items())
 
     print("\nSelect a filtering option for users:")
     menu_items = [
@@ -112,13 +114,15 @@ def top_menu():
     choice = display_menu(menu_items)
 
     if choice == 1:
-        all_submenu(full_list)
-    if choice == 2:
-        positive_balance_submenu(full_list)
-    if choice == 3:
-        no_tokens_submenu(full_list)
+        filtered_list = all_submenu(data_list)
+    elif choice == 2:
+        filtered_list = positive_balance_submenu(data_list)
+    else:
+        filtered_list = no_tokens_submenu(data_list)
 
-def positive_balance_submenu(full_list):
+    write_files(filtered_list, raw_data)
+
+def positive_balance_submenu(data):
     menu_items = [
         f'Get all users',
         f'Get top N users by balance',
@@ -130,16 +134,16 @@ def positive_balance_submenu(full_list):
         f'Get users with less than X and more than or equal to Y tokens'
     ]
     choice = display_menu(menu_items)
-    filtered = list(filter(lambda acc: extract_balance(acc) > 0, full_list))  
+    filtered = list(filter(lambda acc: acc[1] > 0, data))  
     if choice == 1:
         pass
     if choice == 2:
         n = input_number('> N=')
-        filtered.sort(key=extract_balance, reverse=True)
+        filtered.sort(key=lambda acc: acc[1], reverse=True)
         filtered = filtered[:int(n)]
     if choice == 3:
         n = input_number('> N=')
-        filtered.sort(key=extract_balance, reverse=False)
+        filtered.sort(key=lambda acc: acc[1], reverse=False)
         filtered = filtered[:int(n)]
     if choice == 4:
         n = input_number("> N=")
@@ -149,58 +153,57 @@ def positive_balance_submenu(full_list):
             sys.exit('Failed to get random users, try using a smaller N value.')
     if choice == 5:
         x = input_number("> X=")
-        filtered = list(filter(lambda acc: extract_balance(acc) > x, filtered)) 
+        filtered = list(filter(lambda acc: acc[1] > x, filtered)) 
     if choice == 6:
         x = input_number("> X=")
-        filtered = list(filter(lambda acc: extract_balance(acc) >= x, filtered))   
+        filtered = list(filter(lambda acc: acc[1] >= x, filtered))   
     if choice == 7:
         x = input_number("> X=")
-        filtered = list(filter(lambda acc: extract_balance(acc) < x
-            and extract_balance(acc) > 0, filtered))  
+        filtered = list(filter(lambda acc: acc[1] < x
+            and acc[1] > 0, filtered))  
     if choice == 8:
         x = input_number("> X=")
         y = input_number("> Y=")
-        filtered = list(filter(lambda acc: extract_balance(acc) < x 
-            and extract_balance(acc) >= y, filtered))
-    filtered.sort(key=extract_balance, reverse=True)
-    write_file(filtered)
+        filtered = list(filter(lambda acc: acc[1] < x 
+            and acc[1] >= y, filtered))
 
-def all_submenu(full_list):
+    filtered.sort(key=lambda acc: acc[1], reverse=True)
+    return filtered
+
+def all_submenu(data):
     menu_items = [
         f'Get all users that created a token address',
         f'Get N random users that created a token address'
     ]
     choice = display_menu(menu_items)
     if choice == 1:
-        full_list.sort(key=extract_balance, reverse=True)
-        write_file(full_list)
+        filtered = data
     else:
         n = input_number("N=")
         try:
-            filtered = random.sample(full_list, int(n))
+            filtered = random.sample(data, int(n))
         except ValueError:
             sys.exit('Failed to get random users, try using a smaller N value.')
-        # Sort by balance before writing
-        filtered.sort(key=extract_balance, reverse=True)
-        write_file(filtered)
+    # Sort by balance before writing
+    filtered.sort(key=lambda acc: acc[1], reverse=True)
+    return filtered
 
-def no_tokens_submenu(full_list):
+def no_tokens_submenu(data):
     menu_items = [
         f'Get all users with 0 tokens',
         f'Get N random users with 0 tokens'
     ]
     choice = display_menu(menu_items)
     if choice == 1:
-        filtered = [acc for acc in full_list if extract_balance(acc) == 0]
-        write_file(filtered)
+        filtered = [acc for acc in data if acc[1] == 0]
     else:
         n = input_number("N=")
-        filtered = [acc for acc in full_list if extract_balance(acc) == 0]
+        filtered = [acc for acc in data if acc[1] == 0]
         try:
             filtered = random.sample(filtered, int(n))
         except ValueError:
             sys.exit('Failed to get random users, try using a smaller N value.')
-        write_file(filtered)
+    return filtered
 #endregion
 
 def get_token_name(mint):
