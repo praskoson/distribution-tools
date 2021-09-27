@@ -1,5 +1,3 @@
-<p align="left"><a href="https://samoyedcoin.com" target="_blank" rel="noopener noreferrer"><img src="assets/logo/SamoyedTools.png?raw=true" alt="samoyed logo"></a></p>
-
 ## Overview
 This repository contains some of the scripts we have used for running our airdrop campaigns and other distributions. 
 
@@ -35,9 +33,6 @@ Feel free to report any issues you encounter while using these tools, or ideas y
 Distributed under the MIT License
 
 ## Links
-* [Samoyed](https://samoyedcoin.com)
-* [Samoyed Twitter](https://twitter.com/samoyedcoin)
-* [Samoyed Discord](https://discord.gg/Gc5uecWZR2)
 * [Solana](https://solana.com/)
 * [Solana Discord](https://discord.com/invite/pquxPsq)
 
