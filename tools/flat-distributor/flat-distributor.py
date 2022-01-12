@@ -95,6 +95,20 @@ def single_transaction_prompt(full_cmd, amount, recipient, decimals):
     else:
         return False, False
 
+def single_transaction_sol_prompt(full_cmd, amount, recipient):
+    msg = f"Sending {bcolors.OKBLUE}{amount}{bcolors.ENDC} tokens to recipient at: {bcolors.OKCYAN}{recipient}{bcolors.ENDC}.\n"
+    msg += "Cmd to be ran: \n"
+    msg += f"    {bcolors.BOLD}" + full_cmd + f"{bcolors.ENDC}"
+    print(msg, flush=True)
+    choice = input(
+        "Press ENTER to confirm | Type anything to CANCEL | Type ALL to switch to non-interactive mode\n> ")
+    if choice == "":
+        return True, False
+    elif choice == "ALL":
+        return False, True
+    else:
+        return False, False
+
 
 def gen_logfile(name, current_time, folder_prefix):
     filename = "./" + folder_prefix + current_time + "/" + name
@@ -238,6 +252,29 @@ class TransferCmd:
             obj.extend(self.options)
         return obj
 
+class TransferSolCmd:
+    def __init__(self, cmd, instruction, drop_amount, recipient, url, options=None):
+        self.cmd = cmd
+        self.instruction = instruction
+        self.drop_amount = drop_amount
+        self.recipient = recipient
+        self.url = url
+        if options is None:
+            self.options = []
+        else:
+            self.options = options
+
+    def to_str(self):
+        return f"{self.cmd} {self.instruction} {self.recipient} {self.drop_amount} {' '.join(self.options)}"
+
+    def to_list(self):
+        #obj = [self.cmd, self.instruction, self.mint_address, str(self.drop_amount), self.recipient]
+        obj = [self.cmd, self.instruction, self.recipient,
+               f"{self.drop_amount}", '--url', self.url]
+        if self.options:
+            obj.extend(self.options)
+        return obj
+
 
 class bcolors:
     HEADER = '\033[95m'
@@ -306,6 +343,16 @@ def main():
         allow_unfunded_recipient = args.allow_unfunded_recipient
         RETRY_ON_429 = args.retry_on_429
         transfer(input_path, interactive,drop_amount, 
+            fund_recipient, allow_unfunded_recipient
+        )
+    elif mode == 'transferSol':
+        input_path = args.address_list
+        interactive = args.interactive
+        drop_amount = args.drop_amount
+        fund_recipient = args.fund_recipient
+        allow_unfunded_recipient = args.allow_unfunded_recipient
+        RETRY_ON_429 = args.retry_on_429
+        transfer_sol(input_path, interactive,drop_amount, 
             fund_recipient, allow_unfunded_recipient
         )
 
@@ -505,6 +552,128 @@ def transfer(input_path, interactive, drop_amount,
 
     print("Done!")
 
+def transfer_sol(input_path, interactive, drop_amount, 
+            fund_recipient, allow_unfunded_recipient):
+    global RPC_URL, LOG_FOLDER_PREFIX, FULL_LOGS, SUCCESS_LOGS, FAILED_LOGS, CANCELED_LOGS, UNCONFIRMED_LOGS
+    SEPARATOR = "-" * 50
+    LOG_SEPARATOR = "-" * 30 + "\n"
+    TOO_MANY_REQUESTS = "429 Too Many Requests"
+    UNCONFIRMED = "unable to confirm transaction"
+    RPC_ERROR = "RPC response error -32005"
+
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    supply_code, current_supply, _ = run(['solana', 'address'])
+
+    if supply_code != 0:
+        sys.exit('Exiting, failed to read the current supply account address. Try checking the output of \'solana address\'.')
+
+    print(f"{bcolors.DANGER}WARNING: MAKE SURE YOU ARE USING THE CORRECT WALLET/SUPPLY/ TO DISTRIBUTE.\nYOUR CURRENT WALLET ADDRESS IS: {current_supply.decode('utf-8')}{bcolors.ENDC}")
+    print(
+        f"Running airdrop for the solana payout: {bcolors.OKGREEN}{bcolors.ENDC}")
+    drop = amount_prompt(drop_amount)
+    print(
+        f"Airdrop amount: {bcolors.OKGREEN}{drop}{bcolors.ENDC}")
+
+    try:
+        with open(input_path) as f:
+            address_list = f.read().splitlines()
+        print(f'Airdropping to {bcolors.OKGREEN}{len(address_list)} users{bcolors.ENDC}')
+        print(f'Estimated total tokens to be distributed: {bcolors.OKGREEN}{(len(address_list) * drop):,f}{bcolors.ENDC}\n')
+    except (OSError, IOError) as e:
+        sys.exit(f"Error opening address list files.\n{e.strerror}")
+
+    # region Create log files, print locations, write headers
+    timestamp = get_current_utc_time_str()
+    log_success = gen_logfile(SUCCESS_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_canceled = gen_logfile(CANCELED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_failed = gen_logfile(FAILED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_unconfirmed = gen_logfile(UNCONFIRMED_LOGS, timestamp, LOG_FOLDER_PREFIX)
+    log_full = gen_logfile(FULL_LOGS, timestamp, LOG_FOLDER_PREFIX)
+
+    print(f"  Successful logs: (tail -f {log_success})")
+    print(f"  Canceled logs: (tail -f {log_canceled})")
+    print(f"  Failed logs: (tail -f {log_failed})")
+    print(f"  Unconfirmed logs: (tail -f {log_unconfirmed})")
+    print(f"  Detailed logs: (tail -f {log_full})")
+
+    with open(log_success, "a") as ls:
+        ls.write('recipient,amount,signature\n')
+    with open(log_canceled, "a") as lc:
+        lc.write('recipient,amount\n')
+    with open(log_failed, "a") as lfa:
+        lfa.write('recipient,amount,error\n')
+    with open(log_unconfirmed, "a") as lu:
+        lu.write('recipient,amount,error\n')
+    # endregion
+
+    print()
+    try:
+        continue_airdrop_prompt(interactive, SEPARATOR)
+
+        i = 0
+        while i < len(address_list):
+            addr = (address_list[i]).strip()
+            options = []
+            if allow_unfunded_recipient:
+                options.append('--allow-unfunded-recipient')
+            cmd = TransferSolCmd("solana", "transfer",
+                drop, addr, RPC_URL, options)
+            if not interactive:
+                log_detail_entry = ''
+                print(f"{i+1}. Solana transfer to {addr}: ", end="", flush=True)
+                print("kartun: " + cmd.to_str());
+                log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
+                log_detail_entry += try_transfer(
+                    cmd, addr, drop, 
+                    log_success, log_unconfirmed, log_failed, 
+                    TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED)
+
+                with open(log_full, "a") as lf:
+                    lf.write(log_detail_entry + LOG_SEPARATOR)
+                del cmd
+                i += 1
+
+            elif interactive:
+                log_detail_entry = ""
+                print(f"{i+1}. ", end="", flush=True)
+                log_detail_entry += f"{i+1}. Cmdline: {cmd.to_str()}\n"
+
+                confirm, switch_mode = single_transaction_sol_prompt(
+                    cmd.to_str(), drop, addr)
+                if switch_mode:
+                    print("Switching to non-interactive mode.")
+                    interactive = False
+                    continue
+
+                if confirm:
+                    log_detail_entry += try_transfer(
+                        cmd, addr, drop, 
+                        log_success, log_unconfirmed, log_failed, 
+                        TOO_MANY_REQUESTS, RPC_ERROR, UNCONFIRMED)
+                        
+                    with open(log_full, "a") as lf:
+                        lf.write(log_detail_entry + LOG_SEPARATOR)
+                elif not confirm:
+                    print(
+                        f"{bcolors.DANGER}CANCELED{bcolors.ENDC}", flush=True)
+                    cancel = f"{addr},{drop:f}"
+                    with open(log_canceled, "a") as lc:
+                        lc.write(cancel + "\n")
+                    log_detail_entry += f"Cancel: {cancel}\n"
+                    with open(log_full, "a") as lf:
+                        lf.write(log_detail_entry + LOG_SEPARATOR)
+
+                print(f"{bcolors.WARNING}{SEPARATOR}{bcolors.ENDC}")
+                del cmd
+                i += 1
+
+    except KeyboardInterrupt:
+        sys.exit("Interrupted, exiting.")
+    finally:
+        print("Log file handlers closed.")
+
+    print("Done!")
+
 
 # region Argument parsing
 parser = argparse.ArgumentParser(
@@ -615,6 +784,55 @@ parser_t.add_argument(
     required=False,
     help='Retry when a HTTP 429 error code is encountered. Use this at your own risk.'
 )
+
+parser_t = subparsers.add_parser(
+    'transferSol', help='Distribute a flat amount of tokens to all given addresses.')
+
+parser_t.add_argument(
+    '-d',
+    '--drop',
+    dest="drop_amount",
+    type=float,
+    required=False,
+    help='The amount of tokens that will be distributed to each recipient.'
+)
+parser_t.add_argument(
+    '--non-interactive',
+    dest="interactive",
+    default=True,
+    action='store_false',
+    required=False,
+    help='Run in non-interactive mode (no confirmation prompts).'
+)
+parser_t.add_argument(
+    '-a',
+    '--address-list',
+    dest="address_list",
+    required=True,
+    help='Path to the file that contains all addresses that will receive the \
+        airdrop. Each address should be in a seperate line. The file must be UTF-8 encoded.'
+)
+parser_t.add_argument(
+    '--fund-recipient',
+    action='store_true',
+    required=False,
+    help='Create the associated token account for the recipient if it does not exist.'
+)
+parser_t.add_argument(
+    '--allow-unfunded-recipient',
+    action='store_true',
+    required=False,
+    help='Complete the transfer even if the recipient\'s address is not funded.'
+)
+parser_t.add_argument(
+    '--retry-on-429',
+    dest='retry_on_429',
+    action='store_true',
+    default=False,
+    required=False,
+    help='Retry when a HTTP 429 error code is encountered. Use this at your own risk.'
+)
+
 #endregion
 
 if __name__ == '__main__':
